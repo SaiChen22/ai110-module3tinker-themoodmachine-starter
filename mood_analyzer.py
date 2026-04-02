@@ -9,6 +9,8 @@ This class starts with very simple logic:
   - Convert that score into a mood label
 """
 
+import re
+
 from typing import List, Dict, Tuple, Optional
 
 from dataset import POSITIVE_WORDS, NEGATIVE_WORDS
@@ -53,9 +55,11 @@ class MoodAnalyzer:
           - Normalize repeated characters ("soooo" -> "soo")
         """
         cleaned = text.strip().lower()
-        tokens = cleaned.split()
 
-        return tokens
+        # Keep simple emoticons and emoji as separate tokens, while stripping
+        # most punctuation from ordinary words.
+        pattern = r"(:-\)|:\)|:-\(|:\(|😂|💀|🥲|[a-z']+)"
+        return re.findall(pattern, cleaned)
 
     # ---------------------------------------------------------------------
     # Scoring logic
@@ -75,15 +79,37 @@ class MoodAnalyzer:
           - Give some words higher weights than others (for example "hate" < "annoyed")
           - Treat emojis or slang (":)", "lol", "💀") as strong signals
         """
-        # TODO: Implement this method.
-        #   1. Call self.preprocess(text) to get tokens.
-        #   2. Loop over the tokens.
-        #   3. Increase the score for positive words, decrease for negative words.
-        #   4. Return the total score.
-        #
-        # Hint: if you implement negation, you may want to look at pairs of tokens,
-        # like ("not", "happy") or ("never", "fun").
-        pass
+        tokens = self.preprocess(text)
+        score = 0
+
+        negation_words = {"not", "no", "never", "n't"}
+        negate_next = 0
+
+        for token in tokens:
+          if token in negation_words:
+            negate_next = 2
+            continue
+
+          token_score = 0
+          if token in self.positive_words:
+            token_score = 1
+          elif token in self.negative_words:
+            token_score = -1
+          elif token in {":)", "😂", "🥲"}:
+            token_score = 1
+          elif token in {":(", ":-(", "💀"}:
+            token_score = -1
+
+          if token_score != 0 and negate_next > 0:
+            token_score *= -1
+            negate_next = 0
+
+          score += token_score
+
+          if negate_next > 0:
+            negate_next -= 1
+
+        return score
 
     # ---------------------------------------------------------------------
     # Label prediction
@@ -105,12 +131,13 @@ class MoodAnalyzer:
         Just remember that whatever labels you return should match the labels
         you use in TRUE_LABELS in dataset.py if you care about accuracy.
         """
-        # TODO: Implement this method.
-        #   1. Call self.score_text(text) to get the numeric score.
-        #   2. Return "positive" if the score is above 0.
-        #   3. Return "negative" if the score is below 0.
-        #   4. Return "neutral" otherwise.
-        pass
+        score = self.score_text(text)
+
+        if score > 0:
+          return "positive"
+        if score < 0:
+          return "negative"
+        return "neutral"
 
     # ---------------------------------------------------------------------
     # Explanations (optional but recommended)
@@ -137,14 +164,37 @@ class MoodAnalyzer:
         positive_hits: List[str] = []
         negative_hits: List[str] = []
         score = 0
+        negation_words = {"not", "no", "never", "n't"}
+        negate_next = 0
 
         for token in tokens:
-            if token in self.positive_words:
-                positive_hits.append(token)
-                score += 1
-            if token in self.negative_words:
-                negative_hits.append(token)
-                score -= 1
+          if token in negation_words:
+            negate_next = 2
+            continue
+
+          token_score = 0
+          if token in self.positive_words:
+            token_score = 1
+          elif token in self.negative_words:
+            token_score = -1
+          elif token in {":)", "😂", "🥲"}:
+            token_score = 1
+          elif token in {":(", ":-(", "💀"}:
+            token_score = -1
+
+          if token_score != 0 and negate_next > 0:
+            token_score *= -1
+            negate_next = 0
+
+          if token_score > 0:
+            positive_hits.append(token)
+          elif token_score < 0:
+            negative_hits.append(token)
+
+          score += token_score
+
+          if negate_next > 0:
+            negate_next -= 1
 
         return (
             f"Score = {score} "
